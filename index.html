@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#0b1220" />
+  <meta
+    name="description"
+    content="DN Splitter - split image and PDF pages into clean question-by-question parts."
+  />
+
+  <title>DN Splitter </title>
+
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./assets/icons/icon-192.png" />
+
+  <link rel="stylesheet" href="./css/style.css" />
+
+  <!-- PDF.js -->
+  <script type="module">
+    import * as pdfjsLib from "./vendor/pdfjs/pdf.min.mjs";
+    window.pdfjsLib = pdfjsLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.min.mjs";
+  </script>
+
+  <!-- App config -->
+  <script src="./config/app-config.js"></script>
+</head>
+<body>
+  <!-- ONLINE / OFFLINE BANNER -->
+  <div id="networkBanner" class="network-banner hidden" role="status" aria-live="polite">
+    <span id="networkBannerText">You are offline</span>
+    <button id="closeNetworkBannerBtn" class="banner-close-btn" type="button" aria-label="Close message">✕</button>
+  </div>
+
+  <div class="app-shell">
+    <!-- HERO -->
+    <header class="hero-card glass-card">
+      <div class="hero-main">
+        <div class="hero-topline">Installable • Mobile Ready • PDF + Image Support</div>
+        <h1>DN Splitter Pro</h1>
+        <p class="hero-text">
+          Split long exam page images or PDF pages into clean question-by-question parts.
+          Place cut lines exactly where you want — not only equal parts.
+        </p>
+
+        <div class="hero-pills">
+          <span class="pill">3 free uploads</span>
+          <span class="pill">Unlimited after unlock</span>
+          <span class="pill">Image + PDF support</span>
+          <span class="pill">Install as app</span>
+        </div>
+      </div>
+
+      <div class="hero-side glass-subcard">
+        <div class="price-label">One-time unlock</div>
+        <div class="price-row">Rs. <span>100</span></div>
+        <p class="side-text">
+          Users can test the app first. After 3 uploads, they can unlock unlimited use.
+        </p>
+
+        <div class="hero-side-actions">
+          <button id="installBtn" class="btn btn-primary hidden" type="button">
+            Install App
+          </button>
+          <button id="openUnlockBtnTop" class="btn btn-secondary" type="button">
+            Unlock Unlimited
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <main class="main-layout">
+      <!-- LEFT PANEL -->
+      <aside class="sidebar glass-card">
+        <section class="panel-section">
+          <h2 class="section-title">Upload file</h2>
+          <label class="input-label" for="fileInput">Choose image or PDF</label>
+          <input
+            id="fileInput"
+            class="file-input"
+            type="file"
+            accept="image/*,.pdf,application/pdf"
+          />
+          <p class="small-note">
+            Supports browser-supported image formats and PDF files.
+          </p>
+        </section>
+
+        <section id="pdfControlsSection" class="panel-section hidden">
+          <h2 class="section-title">PDF page selection</h2>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Total pages</div>
+              <div id="pdfTotalPages" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Current page</div>
+              <div id="pdfCurrentPage" class="stat-value">0</div>
+            </div>
+          </div>
+
+          <label class="input-label" for="pdfPageInput">Page number</label>
+          <div class="inline-controls">
+            <button id="prevPdfPageBtn" class="btn btn-secondary btn-small" type="button">←</button>
+            <input
+              id="pdfPageInput"
+              class="text-input center-input"
+              type="number"
+              min="1"
+              value="1"
+            />
+            <button id="nextPdfPageBtn" class="btn btn-secondary btn-small" type="button">→</button>
+          </div>
+
+          <button id="renderPdfPageBtn" class="btn btn-primary" type="button">
+            Load PDF Page
+          </button>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">Split setup</h2>
+
+          <label class="input-label" for="targetPiecesInput">Target pieces</label>
+          <input
+            id="targetPiecesInput"
+            class="text-input"
+            type="number"
+            min="2"
+            max="100"
+            value="11"
+          />
+
+          <div class="button-grid two-cols">
+            <button id="autoPlaceBtn" class="btn btn-primary" type="button">
+              Auto Place Lines
+            </button>
+            <button id="addLineBtn" class="btn btn-secondary" type="button">
+              Add One Line
+            </button>
+          </div>
+
+          <div class="button-grid two-cols">
+            <button id="removeSelectedLineBtn" class="btn btn-danger" type="button">
+              Remove Selected
+            </button>
+            <button id="clearAllLinesBtn" class="btn btn-secondary" type="button">
+              Clear All
+            </button>
+          </div>
+
+          <p class="small-note">
+            Tap or click on the preview to add a line. Drag the line to adjust it.
+          </p>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">Export</h2>
+
+          <div class="button-grid">
+            <button id="downloadAllBtn" class="btn btn-success" type="button">
+              Download All Pieces
+            </button>
+            <button id="openUnlockBtnSide" class="btn btn-warn" type="button">
+              Unlock Unlimited
+            </button>
+          </div>
+
+          <p class="small-note">
+            Export uses the original file image quality, not the preview with labels.
+          </p>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">Usage</h2>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Free uploads used</div>
+              <div id="usageCountText" class="stat-value">0 / 3</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Status</div>
+              <div id="accountStatusText" class="stat-value">Free</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">Google account</h2>
+
+          <div id="googleAccountCard" class="account-card">
+            <div id="googleSignedOutState">
+              <p class="small-note account-note">
+                Later, paid users can sign in with Google to keep their unlock linked to their account.
+              </p>
+              <button id="googleSignInBtn" class="btn btn-secondary" type="button">
+                Sign in with Google
+              </button>
+            </div>
+
+            <div id="googleSignedInState" class="hidden">
+              <div class="signed-user-row">
+                <div class="avatar-circle" id="userAvatarCircle">G</div>
+                <div class="signed-user-meta">
+                  <div id="signedUserName" class="signed-user-name">Google User</div>
+                  <div id="signedUserEmail" class="signed-user-email">user@email.com</div>
+                </div>
+              </div>
+              <button id="googleSignOutBtn" class="btn btn-secondary" type="button">
+                Sign out
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h2 class="section-title">Cut lines</h2>
+          <div id="cutLinesList" class="cut-lines-list">
+            <div class="empty-list-text">No cut lines yet</div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <div class="info-box">
+            <strong>Tip:</strong> Place each cut line between two questions, not through the text.
+          </div>
+        </section>
+      </aside>
+
+      <!-- RIGHT WORKSPACE -->
+      <section class="workspace glass-card">
+        <div class="workspace-topbar">
+          <div class="workspace-badges">
+            <span id="fileStatusBadge" class="badge badge-accent">No file loaded</span>
+            <span id="piecesCountBadge" class="badge">Pieces: 0</span>
+            <span id="freeLimitBadge" class="badge badge-warn">Free limit: 3 uploads</span>
+          </div>
+
+          <div class="workspace-badges">
+            <span class="badge">Blue = cut line</span>
+            <span class="badge">Yellow = selected</span>
+          </div>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer-card glass-card">
+      <div class="footer-left">
+        <strong>DN Splitter Pro</strong>
+        <span>Installable web app for students, teachers, and paper creators.</span>
+      </div>
+
+      <nav class="footer-links">
+        <a href="./privacy.html">Privacy Policy</a>
+        <a href="./terms.html">Terms</a>
+        <a href="./contact.html">Contact</a>
+      </nav>
+    </footer>
+  </div>
+
+  <!-- UNLOCK MODAL -->
+  <div id="unlockModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-topline">Unlimited plan</div>
+          <h2>Unlock unlimited use</h2>
+        </div>
+        <button id="closeUnlockModalBtn" class="modal-close-btn" type="button" aria-label="Close">
+          ✕
+        </button>
+      </div>
+
+      <p class="modal-text">
+        Free users can upload and split up to 3 files. After that, unlock unlimited use for Rs.100.
+      </p>
+
+      <div class="modal-price-card">
+        <div class="price-label">One-time payment</div>
+        <div class="price-row">Rs. <span>100</span></div>
+      </div>
+
+      <div class="modal-form-grid">
+        <div>
+          <label class="input-label" for="buyerEmailInput">Email</label>
+          <input
+            id="buyerEmailInput"
+            class="text-input"
+            type="email"
+            placeholder="Enter your email"
+          />
+        </div>
+
+        <div>
+          <label class="input-label" for="unlockCodeInput">Unlock code</label>
+          <input
+            id="unlockCodeInput"
+            class="text-input"
+            type="text"
+            placeholder="Enter unlock code"
+          />
+        </div>
+      </div>
+
+      <div class="button-grid two-cols">
+        <button id="verifyUnlockBtn" class="btn btn-success" type="button">
+          Verify & Unlock
+        </button>
+        <button id="buyNowBtn" class="btn btn-primary" type="button">
+          Buy Now
+        </button>
+      </div>
+
+      <div id="unlockStatusText" class="modal-status-text"></div>
+    </div>
+  </div>
+
+  <!-- APP LOADING OVERLAY -->
+  <div id="appLoadingOverlay" class="app-loading-overlay hidden" aria-live="polite">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <div id="appLoadingText" class="loading-text">Loading...</div>
+    </div>
+  </div>
+
+  <!-- PAGE EMPTY STATE TEMPLATE TEXT -->
+  <template id="canvasEmptyStateTemplate">
+    <div></div>
+  </template>
+
+  <script src="./js/unlock.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
