@@ -7,6 +7,7 @@
    - drag lines
    - clean export
    - rotation control
+   - output settings
    - 3 free uploads logic hookup
 ========================================= */
 
@@ -67,6 +68,14 @@
   const rotateRightFastBtn = document.getElementById("rotateRightFastBtn");
   const resetRotationBtn = document.getElementById("resetRotationBtn");
 
+  const outputPrefixInput = document.getElementById("outputPrefixInput");
+  const outputStartNumberInput = document.getElementById("outputStartNumberInput");
+  const outputFormatSelect = document.getElementById("outputFormatSelect");
+  const outputQualityRange = document.getElementById("outputQualityRange");
+  const outputQualityText = document.getElementById("outputQualityText");
+  const outputExampleText = document.getElementById("outputExampleText");
+  const qualitySection = document.getElementById("qualitySection");
+
   if (!previewCanvas) return;
   const ctx = previewCanvas.getContext("2d");
 
@@ -74,11 +83,11 @@
      APP STATE
   ========================= */
   const state = {
-    sourceType: null, // image | pdf
+    sourceType: null,
     sourceFileName: "",
-    imageElement: null,          // current base image/page
-    rotatedImageElement: null,   // rotated result image
-    imageScale: 1,               // source -> preview
+    imageElement: null,
+    rotatedImageElement: null,
+    imageScale: 1,
     cutLines: [],
     selectedLineIndex: -1,
     draggingLineIndex: -1,
@@ -92,7 +101,12 @@
     rotationHoldTimer: null,
     rotationHoldInterval: null,
     rotationBusy: false,
-    queuedRotationDelta: 0
+    queuedRotationDelta: 0,
+
+    outputPrefix: "q",
+    outputStartNumber: 1,
+    outputFormat: "jpg",
+    outputQuality: 0.95
   };
 
   const UI = {
@@ -147,6 +161,53 @@
 
   function degreesToRadians(deg) {
     return (deg * Math.PI) / 180;
+  }
+
+  function sanitizePrefix(prefix) {
+    const safe = String(prefix || "")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "")
+      .replace(/\s+/g, "");
+    return safe || "q";
+  }
+
+  function getOutputExtension() {
+    if (state.outputFormat === "jpg") return "jpg";
+    if (state.outputFormat === "png") return "png";
+    if (state.outputFormat === "webp") return "webp";
+    return "jpg";
+  }
+
+  function getMimeTypeFromFormat(format) {
+    if (format === "png") return "image/png";
+    if (format === "webp") return "image/webp";
+    return "image/jpeg";
+  }
+
+  function shouldUseQuality(format) {
+    return format === "jpg" || format === "webp";
+  }
+
+  function updateOutputUI() {
+    state.outputPrefix = sanitizePrefix(outputPrefixInput ? outputPrefixInput.value : "q");
+
+    const parsedStart = parseInt(outputStartNumberInput ? outputStartNumberInput.value : "1", 10);
+    state.outputStartNumber = Number.isFinite(parsedStart) ? Math.max(0, parsedStart) : 1;
+
+    state.outputFormat = outputFormatSelect ? outputFormatSelect.value : "jpg";
+    state.outputQuality = (outputQualityRange ? Number(outputQualityRange.value) : 95) / 100;
+
+    if (outputQualityText) {
+      outputQualityText.textContent = `${Math.round(state.outputQuality * 100)}%`;
+    }
+
+    if (qualitySection) {
+      qualitySection.classList.toggle("hidden", !shouldUseQuality(state.outputFormat));
+    }
+
+    if (outputExampleText) {
+      outputExampleText.textContent = `${state.outputPrefix}${state.outputStartNumber}.${getOutputExtension()}`;
+    }
   }
 
   function getUnlockedState() {
@@ -268,6 +329,7 @@
     updatePiecesCount();
     updateFileStatus("No file loaded");
     updateRotationUI();
+    updateOutputUI();
   }
 
   /* =========================
@@ -647,11 +709,15 @@
       row.style.marginBottom = "8px";
       row.style.cursor = "pointer";
 
+      const fileNumber = state.outputStartNumber + index;
+      const exampleName = `${state.outputPrefix}${fileNumber}.${getOutputExtension()}`;
+
       row.innerHTML = `
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
           <strong>Line ${index + 1}</strong>
           <span style="color:#9db1d3; font-size:12px;">Y: ${Math.round(lineY)} px</span>
         </div>
+        <div style="margin-top:6px; color:#7de3ff; font-size:12px;">Next file around here: ${exampleName}</div>
       `;
 
       row.addEventListener("click", () => {
@@ -819,7 +885,16 @@
   /* =========================
      EXPORT
   ========================= */
+  function buildExportFileName(index) {
+    const outputNumber = state.outputStartNumber + index - 1;
+    const prefix = sanitizePrefix(state.outputPrefix);
+    const ext = getOutputExtension();
+    return `${prefix}${outputNumber}.${ext}`;
+  }
+
   function exportAllPieces() {
+    updateOutputUI();
+
     const exportImage = getActiveDisplayImage();
 
     if (!exportImage) {
@@ -834,6 +909,7 @@
     }
 
     const sortedBoundaries = [0, ...state.cutLines.slice().sort((a, b) => a - b), previewCanvas.height];
+    const mimeType = getMimeTypeFromFormat(state.outputFormat);
 
     let clickDelay = 0;
     for (let i = 0; i < sortedBoundaries.length - 1; i++) {
@@ -868,7 +944,13 @@
       );
 
       const link = document.createElement("a");
-      link.href = exportCanvas.toDataURL("image/png");
+
+      if (shouldUseQuality(state.outputFormat)) {
+        link.href = exportCanvas.toDataURL(mimeType, state.outputQuality);
+      } else {
+        link.href = exportCanvas.toDataURL(mimeType);
+      }
+
       link.download = buildExportFileName(i + 1);
 
       setTimeout(() => {
@@ -877,14 +959,6 @@
 
       clickDelay += 180;
     }
-  }
-
-  function buildExportFileName(index) {
-    const cleanBase = (state.sourceFileName || "split")
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^\w\-]+/g, "-");
-
-    return `${cleanBase}-part-${String(index).padStart(2, "0")}.png`;
   }
 
   /* =========================
@@ -1056,6 +1130,23 @@
   }
 
   /* =========================
+     OUTPUT SETTINGS EVENTS
+  ========================= */
+  function bindOutputSettingsEvents() {
+    [outputPrefixInput, outputStartNumberInput, outputFormatSelect, outputQualityRange].forEach((el) => {
+      if (!el) return;
+      el.addEventListener("input", () => {
+        updateOutputUI();
+        updateCutLinesList();
+      });
+      el.addEventListener("change", () => {
+        updateOutputUI();
+        updateCutLinesList();
+      });
+    });
+  }
+
+  /* =========================
      EVENT BINDING
   ========================= */
   function bindEvents() {
@@ -1137,6 +1228,8 @@
     if (resetRotationBtn) {
       resetRotationBtn.addEventListener("click", resetRotation);
     }
+
+    bindOutputSettingsEvents();
   }
 
   /* =========================
@@ -1147,6 +1240,7 @@
     refreshUsageUI();
     updatePiecesCount();
     updateRotationUI();
+    updateOutputUI();
     bindEvents();
     bindInstallPrompt();
     registerServiceWorker();
