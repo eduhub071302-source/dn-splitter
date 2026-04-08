@@ -1,4 +1,4 @@
-const CACHE_NAME = "dn-splitter-v1";
+const CACHE_NAME = "dn-splitter-v2";
 
 const CORE_ASSETS = [
   "./",
