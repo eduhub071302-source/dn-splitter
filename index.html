@@ -31,14 +31,12 @@
   <script src="./config/app-config.js"></script>
 </head>
 <body>
-  <!-- ONLINE / OFFLINE BANNER -->
   <div id="networkBanner" class="network-banner hidden" role="status" aria-live="polite">
     <span id="networkBannerText">You are offline</span>
     <button id="closeNetworkBannerBtn" class="banner-close-btn" type="button" aria-label="Close message">✕</button>
   </div>
 
   <div class="app-shell">
-    <!-- HERO -->
     <header class="hero-card glass-card">
       <div class="hero-main">
         <div class="hero-topline">Installable • Mobile Ready • PDF + Image Support</div>
@@ -74,9 +72,7 @@
       </div>
     </header>
 
-    <!-- MAIN LAYOUT -->
     <main class="main-layout">
-      <!-- LEFT PANEL -->
       <aside class="sidebar glass-card">
         <section class="panel-section">
           <h2 class="section-title">Upload file</h2>
@@ -211,23 +207,25 @@
 
           <label class="input-label" for="outputPrefixInput">Name prefix</label>
           <input
-            id="outputStartNumberInput"
+            id="outputPrefixInput"
             class="text-input"
             type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            value="1"
-            placeholder="Example: 1"
+            value="q"
+            placeholder="Example: q"
+            autocomplete="off"
+            spellcheck="false"
           />
 
           <label class="input-label" for="outputStartNumberInput">Start number</label>
           <input
             id="outputStartNumberInput"
             class="text-input"
-            type="number"
-            min="0"
-            step="1"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            spellcheck="false"
             value="1"
+            placeholder="Example: 1"
           />
 
           <label class="input-label" for="outputFormatSelect">File format</label>
@@ -334,7 +332,6 @@
         </section>
       </aside>
 
-      <!-- RIGHT WORKSPACE -->
       <section class="workspace glass-card">
         <div class="workspace-topbar">
           <div class="workspace-badges">
@@ -355,7 +352,6 @@
       </section>
     </main>
 
-    <!-- FOOTER -->
     <footer class="footer-card glass-card">
       <div class="footer-left">
         <strong>DN Splitter Pro</strong>
@@ -370,7 +366,6 @@
     </footer>
   </div>
 
-  <!-- UNLOCK MODAL -->
   <div id="unlockModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-header">
@@ -427,7 +422,6 @@
     </div>
   </div>
 
-  <!-- APP LOADING OVERLAY -->
   <div id="appLoadingOverlay" class="app-loading-overlay hidden" aria-live="polite">
     <div class="loading-card">
       <div class="spinner"></div>
