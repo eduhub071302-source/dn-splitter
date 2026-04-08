@@ -36,12 +36,9 @@ window.APP_CONFIG = {
   DOMAIN_URL: "",
 
   API_BASE_URL: "",
-  // Example later:
-  // "https://yourdomain.com/api"
 
   /* =========================
-     ENDPOINTS (BACKEND ROUTES)
-     You usually DON'T change these
+     ENDPOINTS
   ========================= */
   VERIFY_ENDPOINT: "/verify-unlock-code",
   CREATE_ORDER_ENDPOINT: "/create-order",
@@ -50,11 +47,7 @@ window.APP_CONFIG = {
      PAYHERE SETTINGS (FILL LATER)
   ========================= */
   PAYHERE_MERCHANT_ID: "",
-
   PAYHERE_PUBLIC_CHECKOUT_URL: "",
-  // Example:
-  // "https://yourdomain.com/pay"
-
   PAYHERE_NOTIFY_URL: "",
   PAYHERE_RETURN_URL: "",
   PAYHERE_CANCEL_URL: "",
@@ -66,17 +59,13 @@ window.APP_CONFIG = {
 
   /* =========================
      LOCAL STORAGE KEY
-     (Do not change after launch)
   ========================= */
   APP_STORAGE_KEY: "qsp_user_state_v1",
 
   /* =========================
      DEV TESTING ONLY
-     ---------------------------------
-     Only used when PAYMENT_MODE = "local-dev"
   ========================= */
   DEV_UNLOCK_CODES: [
-    "TEST-UNLOCK-100",
-    "ADMIN-TEST-2026"
+    "MY-OWNER-CODE-2026"
   ]
 };
