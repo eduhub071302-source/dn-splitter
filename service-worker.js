@@ -1,4 +1,4 @@
-const CACHE_NAME = "dn-splitter-v6";
+const CACHE_NAME = "dn-splitter-v7";
 
 const CORE_ASSETS = [
   "./",
@@ -14,18 +14,29 @@ const CORE_ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting(); // force install
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+  );
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    clients.claim().then(() => {
-      return self.clients.matchAll().then((clients) => {
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      )
+    ).then(() => self.clients.claim())
+      .then(() => self.clients.matchAll())
+      .then((clients) => {
         clients.forEach((client) => {
           client.postMessage({ type: "NEW_VERSION" });
         });
-      });
-    })
+      })
   );
 });
 
@@ -36,7 +47,6 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  // HTML navigation: network first, offline fallback
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
@@ -54,7 +64,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache first, then network
   if (
     url.pathname.endsWith(".css") ||
     url.pathname.endsWith(".js") ||
@@ -81,7 +90,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Default: network first, fallback to cache
   event.respondWith(
     fetch(request)
       .then((response) => {
