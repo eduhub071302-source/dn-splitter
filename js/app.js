@@ -1257,4 +1257,13 @@
     resetEditorStateKeepUsage,
     renderEmptyCanvas
   };
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "NEW_VERSION") {
+        console.log("🔄 New version detected, reloading...");
+        window.location.reload();
+      }
+    });
+  }
 })();
