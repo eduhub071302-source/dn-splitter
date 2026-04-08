@@ -191,7 +191,14 @@
   function updateOutputUI() {
     state.outputPrefix = sanitizePrefix(outputPrefixInput ? outputPrefixInput.value : "q");
 
-    const parsedStart = parseInt(outputStartNumberInput ? outputStartNumberInput.value : "1", 10);
+    let rawStartValue = outputStartNumberInput ? outputStartNumberInput.value : "1";
+    rawStartValue = String(rawStartValue || "").replace(/[^\d]/g, "");
+
+    if (outputStartNumberInput && outputStartNumberInput.value !== rawStartValue) {
+      outputStartNumberInput.value = rawStartValue;
+    }
+
+    const parsedStart = parseInt(rawStartValue || "1", 10);
     state.outputStartNumber = Number.isFinite(parsedStart) ? Math.max(0, parsedStart) : 1;
 
     state.outputFormat = outputFormatSelect ? outputFormatSelect.value : "jpg";
@@ -206,7 +213,7 @@
     }
 
     if (outputExampleText) {
-      outputExampleText.textContent = `${state.outputPrefix}${state.outputStartNumber}.${getOutputExtension()}`;
+    outputExampleText.textContent = `${state.outputPrefix}${state.outputStartNumber}.${getOutputExtension()}`;
     }
   }
 
@@ -1135,15 +1142,44 @@
   function bindOutputSettingsEvents() {
     [outputPrefixInput, outputStartNumberInput, outputFormatSelect, outputQualityRange].forEach((el) => {
       if (!el) return;
+
       el.addEventListener("input", () => {
         updateOutputUI();
         updateCutLinesList();
       });
+
       el.addEventListener("change", () => {
         updateOutputUI();
         updateCutLinesList();
       });
     });
+
+    if (outputStartNumberInput) {
+      outputStartNumberInput.addEventListener("keydown", (event) => {
+        const allowedKeys = [
+          "Backspace",
+          "Delete",
+          "ArrowLeft",
+          "ArrowRight",
+          "Tab",
+          "Home",
+          "End"
+        ];
+
+        if (allowedKeys.includes(event.key)) return;
+
+        if (!/^\d$/.test(event.key)) {
+          event.preventDefault();
+        }
+      });
+
+      outputStartNumberInput.addEventListener("paste", (event) => {
+        const pastedText = (event.clipboardData || window.clipboardData).getData("text");
+        if (!/^\d+$/.test(pastedText.trim())) {
+          event.preventDefault();
+        }
+      });
+    }
   }
 
   /* =========================
