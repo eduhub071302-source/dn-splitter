@@ -248,6 +248,7 @@ body {
   background: #081322;
   color: white;
   outline: none;
+  appearance: none;
 }
 
 .text-input:focus,
@@ -310,6 +311,11 @@ body {
   font-size: 1.2rem;
   font-weight: bold;
   margin-top: 4px;
+}
+
+.output-example {
+  color: var(--accent-2);
+  word-break: break-all;
 }
 
 /* ==============================
@@ -426,6 +432,19 @@ canvas {
   color: var(--muted);
   font-size: 0.9rem;
   word-break: break-word;
+}
+
+/* ==============================
+   OUTPUT QUALITY
+============================== */
+.quality-section {
+  display: grid;
+  gap: 8px;
+}
+
+.quality-range {
+  width: 100%;
+  accent-color: #58a6ff;
 }
 
 /* ==============================
