@@ -6,6 +6,7 @@
    - cut lines
    - drag lines
    - clean export
+   - rotation control
    - 3 free uploads logic hookup
 ========================================= */
 
@@ -59,6 +60,13 @@
   const appLoadingOverlay = document.getElementById("appLoadingOverlay");
   const appLoadingText = document.getElementById("appLoadingText");
 
+  const rotationAngleText = document.getElementById("rotationAngleText");
+  const rotateLeftBtn = document.getElementById("rotateLeftBtn");
+  const rotateRightBtn = document.getElementById("rotateRightBtn");
+  const rotateLeftFastBtn = document.getElementById("rotateLeftFastBtn");
+  const rotateRightFastBtn = document.getElementById("rotateRightFastBtn");
+  const resetRotationBtn = document.getElementById("resetRotationBtn");
+
   if (!previewCanvas) return;
   const ctx = previewCanvas.getContext("2d");
 
@@ -68,8 +76,9 @@
   const state = {
     sourceType: null, // image | pdf
     sourceFileName: "",
-    imageElement: null, // original image element
-    imageScale: 1, // original -> preview
+    imageElement: null,          // current base image/page
+    rotatedImageElement: null,   // rotated result image
+    imageScale: 1,               // source -> preview
     cutLines: [],
     selectedLineIndex: -1,
     draggingLineIndex: -1,
@@ -77,7 +86,13 @@
     currentPdfDoc: null,
     currentPdfPage: 1,
     totalPdfPages: 0,
-    pointerDown: false
+    pointerDown: false,
+
+    rotationAngle: 0,
+    rotationHoldTimer: null,
+    rotationHoldInterval: null,
+    rotationBusy: false,
+    queuedRotationDelta: 0
   };
 
   const UI = {
@@ -94,7 +109,7 @@
   ========================= */
   function showLoading(text = "Loading...") {
     if (!appLoadingOverlay) return;
-    appLoadingText.textContent = text;
+    if (appLoadingText) appLoadingText.textContent = text;
     appLoadingOverlay.classList.remove("hidden");
   }
 
@@ -123,6 +138,17 @@
     state.cutLines.sort((a, b) => a - b);
   }
 
+  function normalizeAngle(angle) {
+    let a = angle;
+    while (a > 180) a -= 360;
+    while (a <= -180) a += 360;
+    return Number(a.toFixed(1));
+  }
+
+  function degreesToRadians(deg) {
+    return (deg * Math.PI) / 180;
+  }
+
   function getUnlockedState() {
     if (window.UnlockSystem && typeof window.UnlockSystem.getState === "function") {
       return window.UnlockSystem.getState();
@@ -147,12 +173,18 @@
   }
 
   function updatePiecesCount() {
-    const pieces = state.imageElement ? state.cutLines.length + 1 : 0;
+    const pieces = getActiveDisplayImage() ? state.cutLines.length + 1 : 0;
     setBadgeText(piecesCountBadge, `Pieces: ${pieces}`);
   }
 
   function updateFileStatus(text) {
     setBadgeText(fileStatusBadge, text);
+  }
+
+  function updateRotationUI() {
+    if (rotationAngleText) {
+      rotationAngleText.textContent = `${state.rotationAngle.toFixed(1)}°`;
+    }
   }
 
   function openUnlockModalSafe() {
@@ -190,10 +222,29 @@
     if (fileInput) fileInput.value = "";
   }
 
+  function stopRotationHold() {
+    if (state.rotationHoldTimer) {
+      clearTimeout(state.rotationHoldTimer);
+      state.rotationHoldTimer = null;
+    }
+
+    if (state.rotationHoldInterval) {
+      clearInterval(state.rotationHoldInterval);
+      state.rotationHoldInterval = null;
+    }
+  }
+
+  function getActiveDisplayImage() {
+    return state.rotatedImageElement || state.imageElement;
+  }
+
   function resetEditorStateKeepUsage() {
+    stopRotationHold();
+
     state.sourceType = null;
     state.sourceFileName = "";
     state.imageElement = null;
+    state.rotatedImageElement = null;
     state.imageScale = 1;
     state.cutLines = [];
     state.selectedLineIndex = -1;
@@ -202,6 +253,10 @@
     state.currentPdfDoc = null;
     state.currentPdfPage = 1;
     state.totalPdfPages = 0;
+    state.pointerDown = false;
+    state.rotationAngle = 0;
+    state.rotationBusy = false;
+    state.queuedRotationDelta = 0;
 
     if (pdfControlsSection) pdfControlsSection.classList.add("hidden");
     if (pdfTotalPages) pdfTotalPages.textContent = "0";
@@ -212,6 +267,7 @@
     updateCutLinesList();
     updatePiecesCount();
     updateFileStatus("No file loaded");
+    updateRotationUI();
   }
 
   /* =========================
@@ -235,10 +291,148 @@
   }
 
   /* =========================
+     ROTATION
+  ========================= */
+  function createRotatedImageFromBase(baseImage, angleDeg) {
+    return new Promise((resolve, reject) => {
+      const rad = degreesToRadians(angleDeg);
+
+      const srcW = baseImage.naturalWidth || baseImage.width;
+      const srcH = baseImage.naturalHeight || baseImage.height;
+
+      const absCos = Math.abs(Math.cos(rad));
+      const absSin = Math.abs(Math.sin(rad));
+
+      const outW = Math.ceil(srcW * absCos + srcH * absSin);
+      const outH = Math.ceil(srcW * absSin + srcH * absCos);
+
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+
+      tempCanvas.width = outW;
+      tempCanvas.height = outH;
+
+      tempCtx.fillStyle = "#ffffff";
+      tempCtx.fillRect(0, 0, outW, outH);
+
+      tempCtx.translate(outW / 2, outH / 2);
+      tempCtx.rotate(rad);
+      tempCtx.drawImage(baseImage, -srcW / 2, -srcH / 2);
+
+      const rotatedImg = new Image();
+      rotatedImg.onload = () => resolve(rotatedImg);
+      rotatedImg.onerror = reject;
+      rotatedImg.src = tempCanvas.toDataURL("image/png");
+    });
+  }
+
+  async function renderRotationAtCurrentAngle() {
+    if (!state.imageElement) return;
+
+    const oldHeight = previewCanvas.height || 1;
+    const oldLines = state.cutLines.slice();
+    const oldSelectedIndex = state.selectedLineIndex;
+
+    if (Math.abs(state.rotationAngle) < 0.0001) {
+      state.rotatedImageElement = null;
+    } else {
+      state.rotatedImageElement = await createRotatedImageFromBase(state.imageElement, state.rotationAngle);
+    }
+
+    const displayImage = getActiveDisplayImage();
+    const maxPreviewWidth = getPreviewMaxWidth();
+    state.imageScale = Math.min(1, maxPreviewWidth / displayImage.naturalWidth);
+
+    previewCanvas.width = Math.round(displayImage.naturalWidth * state.imageScale);
+    previewCanvas.height = Math.round(displayImage.naturalHeight * state.imageScale);
+
+    state.cutLines = oldLines.map((lineY) =>
+      clamp(
+        Math.round((lineY / oldHeight) * previewCanvas.height),
+        UI.minLineYMargin,
+        previewCanvas.height - UI.minLineYMargin
+      )
+    );
+
+    state.selectedLineIndex =
+      oldSelectedIndex >= state.cutLines.length ? state.cutLines.length - 1 : oldSelectedIndex;
+
+    drawPreview();
+    updateCutLinesList();
+    updatePiecesCount();
+    updateRotationUI();
+  }
+
+  async function processQueuedRotation() {
+    if (state.rotationBusy) return;
+    if (!state.imageElement) return;
+
+    state.rotationBusy = true;
+    showLoading("Rotating image...");
+
+    try {
+      while (Math.abs(state.queuedRotationDelta) > 0.00001) {
+        const delta = state.queuedRotationDelta;
+        state.queuedRotationDelta = 0;
+        state.rotationAngle = normalizeAngle(state.rotationAngle + delta);
+        await renderRotationAtCurrentAngle();
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Could not rotate image.");
+    } finally {
+      state.rotationBusy = false;
+      hideLoading();
+    }
+  }
+
+  function queueRotation(angleDelta) {
+    if (!state.imageElement) return;
+    state.queuedRotationDelta = Number((state.queuedRotationDelta + angleDelta).toFixed(4));
+    processQueuedRotation();
+  }
+
+  function startRotationHold(step) {
+    if (!state.imageElement) return;
+
+    stopRotationHold();
+    queueRotation(step);
+
+    state.rotationHoldTimer = setTimeout(() => {
+      state.rotationHoldInterval = setInterval(() => {
+        queueRotation(step);
+      }, 80);
+    }, 300);
+  }
+
+  function resetRotation() {
+    if (!state.imageElement) return;
+    stopRotationHold();
+    state.rotationAngle = 0;
+    state.queuedRotationDelta = 0;
+    showLoading("Resetting rotation...");
+
+    Promise.resolve()
+      .then(() => renderRotationAtCurrentAngle())
+      .catch((error) => {
+        console.error(error);
+        alert("Could not reset rotation.");
+      })
+      .finally(() => {
+        hideLoading();
+      });
+  }
+
+  /* =========================
      IMAGE LOADING
   ========================= */
   function renderImageToPreview(imgEl, fileName = "Image") {
+    stopRotationHold();
+
     state.imageElement = imgEl;
+    state.rotatedImageElement = null;
+    state.rotationAngle = 0;
+    state.queuedRotationDelta = 0;
     state.sourceFileName = fileName;
 
     const maxPreviewWidth = getPreviewMaxWidth();
@@ -255,6 +449,7 @@
     updateCutLinesList();
     updatePiecesCount();
     updateFileStatus(`${fileName} loaded`);
+    updateRotationUI();
   }
 
   function loadImageFile(file) {
@@ -266,11 +461,13 @@
       state.sourceType = "image";
       renderImageToPreview(img, file.name);
       hideLoading();
+      URL.revokeObjectURL(imageUrl);
     };
 
     img.onerror = function () {
       hideLoading();
       alert("Could not load the selected image.");
+      URL.revokeObjectURL(imageUrl);
     };
 
     img.src = imageUrl;
@@ -296,11 +493,13 @@
       state.totalPdfPages = pdf.numPages;
       state.currentPdfPage = 1;
 
-      pdfControlsSection.classList.remove("hidden");
-      pdfTotalPages.textContent = String(pdf.numPages);
-      pdfCurrentPage.textContent = "1";
-      pdfPageInput.max = String(pdf.numPages);
-      pdfPageInput.value = "1";
+      if (pdfControlsSection) pdfControlsSection.classList.remove("hidden");
+      if (pdfTotalPages) pdfTotalPages.textContent = String(pdf.numPages);
+      if (pdfCurrentPage) pdfCurrentPage.textContent = "1";
+      if (pdfPageInput) {
+        pdfPageInput.max = String(pdf.numPages);
+        pdfPageInput.value = "1";
+      }
 
       await renderCurrentPdfPage();
     } catch (error) {
@@ -321,7 +520,6 @@
       const baseViewport = page.getViewport({ scale: 1 });
       const desiredMaxWidth = 1600;
       const renderScale = desiredMaxWidth / baseViewport.width;
-
       const viewport = page.getViewport({ scale: renderScale });
 
       const tempCanvas = document.createElement("canvas");
@@ -344,8 +542,10 @@
       });
 
       renderImageToPreview(img, `${state.sourceFileName} - Page ${state.currentPdfPage}`);
-      pdfCurrentPage.textContent = String(state.currentPdfPage);
-      pdfPageInput.value = String(state.currentPdfPage);
+
+      if (pdfCurrentPage) pdfCurrentPage.textContent = String(state.currentPdfPage);
+      if (pdfPageInput) pdfPageInput.value = String(state.currentPdfPage);
+
       updateFileStatus(`${state.sourceFileName} - Page ${state.currentPdfPage} loaded`);
     } catch (error) {
       console.error(error);
@@ -359,13 +559,15 @@
      DRAW PREVIEW
   ========================= */
   function drawPreview() {
-    if (!state.imageElement) {
+    const displayImage = getActiveDisplayImage();
+
+    if (!displayImage) {
       renderEmptyCanvas();
       return;
     }
 
     ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-    ctx.drawImage(state.imageElement, 0, 0, previewCanvas.width, previewCanvas.height);
+    ctx.drawImage(displayImage, 0, 0, previewCanvas.width, previewCanvas.height);
 
     state.cutLines.forEach((lineY, index) => {
       const selected = index === state.selectedLineIndex;
@@ -466,7 +668,7 @@
      CUT LINE LOGIC
   ========================= */
   function addCutLine(y = null) {
-    if (!state.imageElement) return;
+    if (!getActiveDisplayImage()) return;
 
     const newY = y === null
       ? Math.round(previewCanvas.height / 2)
@@ -500,7 +702,7 @@
   }
 
   function autoPlaceCutLines() {
-    if (!state.imageElement) return;
+    if (!getActiveDisplayImage()) return;
 
     const pieces = parseInt(targetPiecesInput.value, 10);
     if (!Number.isFinite(pieces) || pieces < 2) {
@@ -533,21 +735,6 @@
     return -1;
   }
 
-  function findClosestLineIndex(targetY) {
-    let bestIndex = -1;
-    let bestDistance = Infinity;
-
-    state.cutLines.forEach((lineY, index) => {
-      const distance = Math.abs(lineY - targetY);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = index;
-      }
-    });
-
-    return bestIndex;
-  }
-
   /* =========================
      POINTER HELPERS
   ========================= */
@@ -578,7 +765,7 @@
   }
 
   function onPointerStart(event) {
-    if (!state.imageElement) return;
+    if (!getActiveDisplayImage()) return;
 
     if (event.cancelable) event.preventDefault();
 
@@ -601,7 +788,7 @@
   }
 
   function onPointerMove(event) {
-    if (!state.imageElement || !state.pointerDown || state.draggingLineIndex < 0) return;
+    if (!getActiveDisplayImage() || !state.pointerDown || state.draggingLineIndex < 0) return;
 
     if (event.cancelable) event.preventDefault();
 
@@ -614,7 +801,8 @@
     );
 
     sortCutLines();
-    state.selectedLineIndex = findClosestLineIndex(state.cutLines[state.draggingLineIndex]);
+    state.selectedLineIndex = state.draggingLineIndex;
+
     drawPreview();
     updateCutLinesList();
   }
@@ -632,7 +820,9 @@
      EXPORT
   ========================= */
   function exportAllPieces() {
-    if (!state.imageElement) {
+    const exportImage = getActiveDisplayImage();
+
+    if (!exportImage) {
       alert("Please upload an image or PDF first.");
       return;
     }
@@ -659,18 +849,21 @@
       const exportCanvas = document.createElement("canvas");
       const exportCtx = exportCanvas.getContext("2d");
 
-      exportCanvas.width = state.imageElement.naturalWidth;
+      exportCanvas.width = exportImage.naturalWidth;
       exportCanvas.height = sourceHeight;
 
+      exportCtx.fillStyle = "#ffffff";
+      exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
       exportCtx.drawImage(
-        state.imageElement,
+        exportImage,
         0,
         sourceY,
-        state.imageElement.naturalWidth,
+        exportImage.naturalWidth,
         sourceHeight,
         0,
         0,
-        state.imageElement.naturalWidth,
+        exportImage.naturalWidth,
         sourceHeight
       );
 
@@ -756,6 +949,113 @@
   }
 
   /* =========================
+     RESPONSIVE RE-RENDER
+  ========================= */
+  function reRenderWithResponsiveScale() {
+    const displayImage = getActiveDisplayImage();
+
+    if (!displayImage) {
+      renderEmptyCanvas();
+      return;
+    }
+
+    const oldHeight = previewCanvas.height || 1;
+    const oldLines = state.cutLines.slice();
+    const oldSelectedIndex = state.selectedLineIndex;
+
+    const maxPreviewWidth = getPreviewMaxWidth();
+    state.imageScale = Math.min(1, maxPreviewWidth / displayImage.naturalWidth);
+
+    previewCanvas.width = Math.round(displayImage.naturalWidth * state.imageScale);
+    previewCanvas.height = Math.round(displayImage.naturalHeight * state.imageScale);
+
+    state.cutLines = oldLines.map((lineY) =>
+      clamp(
+        Math.round((lineY / oldHeight) * previewCanvas.height),
+        UI.minLineYMargin,
+        previewCanvas.height - UI.minLineYMargin
+      )
+    );
+
+    state.selectedLineIndex =
+      oldSelectedIndex >= state.cutLines.length ? state.cutLines.length - 1 : oldSelectedIndex;
+
+    drawPreview();
+    updateCutLinesList();
+    updateRotationUI();
+  }
+
+  /* =========================
+     PWA INSTALL HOOK
+  ========================= */
+  function bindInstallPrompt() {
+    const installBtn = document.getElementById("installBtn");
+    let deferredPrompt = null;
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      if (installBtn) {
+        installBtn.classList.remove("hidden");
+      }
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        try {
+          await deferredPrompt.userChoice;
+        } catch (error) {
+          console.error(error);
+        }
+        deferredPrompt = null;
+        installBtn.classList.add("hidden");
+      });
+    }
+
+    window.addEventListener("appinstalled", () => {
+      if (installBtn) installBtn.classList.add("hidden");
+    });
+  }
+
+  /* =========================
+     SERVICE WORKER REGISTER
+  ========================= */
+  function registerServiceWorker() {
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js").catch((error) => {
+          console.error("Service worker registration failed:", error);
+        });
+      });
+    }
+  }
+
+  /* =========================
+     ROTATION BUTTON EVENTS
+  ========================= */
+  function bindHoldRotation(button, step) {
+    if (!button) return;
+
+    const start = (event) => {
+      if (!state.imageElement) return;
+      if (event.cancelable) event.preventDefault();
+      startRotationHold(step);
+    };
+
+    const stop = () => stopRotationHold();
+
+    button.addEventListener("mousedown", start);
+    button.addEventListener("touchstart", start, { passive: false });
+
+    button.addEventListener("mouseup", stop);
+    button.addEventListener("mouseleave", stop);
+    button.addEventListener("touchend", stop);
+    button.addEventListener("touchcancel", stop);
+  }
+
+  /* =========================
      EVENT BINDING
   ========================= */
   function bindEvents() {
@@ -810,23 +1110,17 @@
     window.addEventListener("touchend", onPointerEnd, { passive: false });
     window.addEventListener("touchcancel", onPointerEnd, { passive: false });
 
-    window.addEventListener("resize", () => {
-      if (state.imageElement) {
-        renderImageToPreview(state.imageElement, state.sourceFileName);
-        if (state.cutLines.length) {
-          // keep old lines proportionally after resize
-          // renderImageToPreview resets lines, so restore them
-        }
-      } else {
-        renderEmptyCanvas();
-      }
-    });
-
     window.addEventListener("keydown", (event) => {
       if (event.key === "Delete") {
         removeSelectedCutLine();
       }
+
+      if (event.key === "Escape") {
+        stopRotationHold();
+      }
     });
+
+    window.addEventListener("resize", reRenderWithResponsiveScale);
 
     window.addEventListener("online", handleOnlineStatus);
     window.addEventListener("offline", handleOnlineStatus);
@@ -834,84 +1128,14 @@
     if (closeNetworkBannerBtn) {
       closeNetworkBannerBtn.addEventListener("click", hideNetworkBanner);
     }
-  }
 
-  /* =========================
-     PRESERVE CUTS ON RESIZE
-  ========================= */
-  function reRenderWithResponsiveScale() {
-    if (!state.imageElement) {
-      renderEmptyCanvas();
-      return;
-    }
+    bindHoldRotation(rotateLeftBtn, -0.1);
+    bindHoldRotation(rotateRightBtn, 0.1);
+    bindHoldRotation(rotateLeftFastBtn, -1);
+    bindHoldRotation(rotateRightFastBtn, 1);
 
-    const oldHeight = previewCanvas.height || 1;
-    const oldLines = state.cutLines.slice();
-    const oldSelectedIndex = state.selectedLineIndex;
-
-    const maxPreviewWidth = getPreviewMaxWidth();
-    state.imageScale = Math.min(1, maxPreviewWidth / state.imageElement.naturalWidth);
-
-    previewCanvas.width = Math.round(state.imageElement.naturalWidth * state.imageScale);
-    previewCanvas.height = Math.round(state.imageElement.naturalHeight * state.imageScale);
-
-    state.cutLines = oldLines.map((lineY) =>
-      clamp(
-        Math.round((lineY / oldHeight) * previewCanvas.height),
-        UI.minLineYMargin,
-        previewCanvas.height - UI.minLineYMargin
-      )
-    );
-    state.selectedLineIndex = oldSelectedIndex >= state.cutLines.length ? state.cutLines.length - 1 : oldSelectedIndex;
-
-    drawPreview();
-    updateCutLinesList();
-  }
-
-  /* =========================
-     PWA INSTALL HOOK
-  ========================= */
-  function bindInstallPrompt() {
-    const installBtn = document.getElementById("installBtn");
-    let deferredPrompt = null;
-
-    window.addEventListener("beforeinstallprompt", (event) => {
-      event.preventDefault();
-      deferredPrompt = event;
-      if (installBtn) {
-        installBtn.classList.remove("hidden");
-      }
-    });
-
-    if (installBtn) {
-      installBtn.addEventListener("click", async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        try {
-          await deferredPrompt.userChoice;
-        } catch (error) {
-          console.error(error);
-        }
-        deferredPrompt = null;
-        installBtn.classList.add("hidden");
-      });
-    }
-
-    window.addEventListener("appinstalled", () => {
-      if (installBtn) installBtn.classList.add("hidden");
-    });
-  }
-
-  /* =========================
-     SERVICE WORKER REGISTER
-  ========================= */
-  function registerServiceWorker() {
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./service-worker.js").catch((error) => {
-          console.error("Service worker registration failed:", error);
-        });
-      });
+    if (resetRotationBtn) {
+      resetRotationBtn.addEventListener("click", resetRotation);
     }
   }
 
@@ -922,18 +1146,11 @@
     renderEmptyCanvas();
     refreshUsageUI();
     updatePiecesCount();
+    updateRotationUI();
     bindEvents();
     bindInstallPrompt();
     registerServiceWorker();
     handleOnlineStatus();
-
-    const originalResizeHandler = window.onresize;
-    window.addEventListener("resize", () => {
-      if (typeof originalResizeHandler === "function") {
-        originalResizeHandler();
-      }
-      reRenderWithResponsiveScale();
-    });
   }
 
   init();
