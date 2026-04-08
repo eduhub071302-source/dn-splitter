@@ -14,17 +14,11 @@
 (function () {
   "use strict";
 
-  /* =========================
-     CONFIG SAFETY
-  ========================= */
   const CONFIG_SAFE = window.APP_CONFIG || {
     APP_NAME: "Question Splitter Pro",
     FREE_UPLOAD_LIMIT: 3
   };
 
-  /* =========================
-     DOM
-  ========================= */
   const fileInput = document.getElementById("fileInput");
   const pdfControlsSection = document.getElementById("pdfControlsSection");
   const pdfTotalPages = document.getElementById("pdfTotalPages");
@@ -79,9 +73,6 @@
   if (!previewCanvas) return;
   const ctx = previewCanvas.getContext("2d");
 
-  /* =========================
-     APP STATE
-  ========================= */
   const state = {
     sourceType: null,
     sourceFileName: "",
@@ -118,9 +109,6 @@
     lineHitTolerance: 14
   };
 
-  /* =========================
-     HELPERS
-  ========================= */
   function showLoading(text = "Loading...") {
     if (!appLoadingOverlay) return;
     if (appLoadingText) appLoadingText.textContent = text;
@@ -194,11 +182,15 @@
     let rawStartValue = outputStartNumberInput ? outputStartNumberInput.value : "1";
     rawStartValue = String(rawStartValue || "").replace(/[^\d]/g, "");
 
+    if (rawStartValue === "") {
+      rawStartValue = "1";
+    }
+
     if (outputStartNumberInput && outputStartNumberInput.value !== rawStartValue) {
       outputStartNumberInput.value = rawStartValue;
     }
 
-    const parsedStart = parseInt(rawStartValue || "1", 10);
+    const parsedStart = parseInt(rawStartValue, 10);
     state.outputStartNumber = Number.isFinite(parsedStart) ? Math.max(0, parsedStart) : 1;
 
     state.outputFormat = outputFormatSelect ? outputFormatSelect.value : "jpg";
@@ -213,7 +205,7 @@
     }
 
     if (outputExampleText) {
-    outputExampleText.textContent = `${state.outputPrefix}${state.outputStartNumber}.${getOutputExtension()}`;
+      outputExampleText.textContent = `${state.outputPrefix}${state.outputStartNumber}.${getOutputExtension()}`;
     }
   }
 
@@ -339,9 +331,6 @@
     updateOutputUI();
   }
 
-  /* =========================
-     EMPTY CANVAS
-  ========================= */
   function renderEmptyCanvas() {
     previewCanvas.width = UI.emptyCanvasWidth;
     previewCanvas.height = UI.emptyCanvasHeight;
@@ -359,9 +348,6 @@
     ctx.fillText("Preview will appear here", previewCanvas.width / 2, previewCanvas.height / 2 + 26);
   }
 
-  /* =========================
-     ROTATION
-  ========================= */
   function createRotatedImageFromBase(baseImage, angleDeg) {
     return new Promise((resolve, reject) => {
       const rad = degreesToRadians(angleDeg);
@@ -492,9 +478,6 @@
       });
   }
 
-  /* =========================
-     IMAGE LOADING
-  ========================= */
   function renderImageToPreview(imgEl, fileName = "Image") {
     stopRotationHold();
 
@@ -542,9 +525,6 @@
     img.src = imageUrl;
   }
 
-  /* =========================
-     PDF LOADING
-  ========================= */
   async function loadPdfFile(file) {
     if (!window.pdfjsLib) {
       alert("PDF support is not ready. Please add PDF.js files correctly.");
@@ -624,9 +604,6 @@
     }
   }
 
-  /* =========================
-     DRAW PREVIEW
-  ========================= */
   function drawPreview() {
     const displayImage = getActiveDisplayImage();
 
@@ -690,9 +667,6 @@
     if (stroke) context.stroke();
   }
 
-  /* =========================
-     CUT LINE LIST
-  ========================= */
   function updateCutLinesList() {
     if (!cutLinesList) return;
 
@@ -737,9 +711,6 @@
     });
   }
 
-  /* =========================
-     CUT LINE LOGIC
-  ========================= */
   function addCutLine(y = null) {
     if (!getActiveDisplayImage()) return;
 
@@ -808,9 +779,6 @@
     return -1;
   }
 
-  /* =========================
-     POINTER HELPERS
-  ========================= */
   function getCanvasPointFromEvent(event) {
     const rect = previewCanvas.getBoundingClientRect();
 
@@ -889,9 +857,6 @@
     state.dragPointerOffsetY = 0;
   }
 
-  /* =========================
-     EXPORT
-  ========================= */
   function buildExportFileName(index) {
     const outputNumber = state.outputStartNumber + index - 1;
     const prefix = sanitizePrefix(state.outputPrefix);
@@ -968,9 +933,6 @@
     }
   }
 
-  /* =========================
-     FILE HANDLER
-  ========================= */
   async function handleFileSelection(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -1001,9 +963,6 @@
     }
   }
 
-  /* =========================
-     PDF PAGE CONTROLS
-  ========================= */
   function goToPdfPage(pageNumber) {
     if (!state.currentPdfDoc) return;
 
@@ -1017,9 +976,6 @@
     renderCurrentPdfPage();
   }
 
-  /* =========================
-     NETWORK UI
-  ========================= */
   function handleOnlineStatus() {
     if (navigator.onLine) {
       showNetworkBanner("Back online");
@@ -1029,9 +985,6 @@
     }
   }
 
-  /* =========================
-     RESPONSIVE RE-RENDER
-  ========================= */
   function reRenderWithResponsiveScale() {
     const displayImage = getActiveDisplayImage();
 
@@ -1066,9 +1019,6 @@
     updateRotationUI();
   }
 
-  /* =========================
-     PWA INSTALL HOOK
-  ========================= */
   function bindInstallPrompt() {
     const installBtn = document.getElementById("installBtn");
     let deferredPrompt = null;
@@ -1100,9 +1050,6 @@
     });
   }
 
-  /* =========================
-     SERVICE WORKER REGISTER
-  ========================= */
   function registerServiceWorker() {
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -1113,9 +1060,6 @@
     }
   }
 
-  /* =========================
-     ROTATION BUTTON EVENTS
-  ========================= */
   function bindHoldRotation(button, step) {
     if (!button) return;
 
@@ -1136,9 +1080,6 @@
     button.addEventListener("touchcancel", stop);
   }
 
-  /* =========================
-     OUTPUT SETTINGS EVENTS
-  ========================= */
   function bindOutputSettingsEvents() {
     [outputPrefixInput, outputStartNumberInput, outputFormatSelect, outputQualityRange].forEach((el) => {
       if (!el) return;
@@ -1179,12 +1120,13 @@
           event.preventDefault();
         }
       });
+
+      outputStartNumberInput.addEventListener("wheel", (event) => {
+        event.preventDefault();
+      }, { passive: false });
     }
   }
 
-  /* =========================
-     EVENT BINDING
-  ========================= */
   function bindEvents() {
     if (fileInput) {
       fileInput.addEventListener("change", handleFileSelection);
@@ -1268,9 +1210,6 @@
     bindOutputSettingsEvents();
   }
 
-  /* =========================
-     INIT
-  ========================= */
   function init() {
     renderEmptyCanvas();
     refreshUsageUI();
@@ -1285,9 +1224,6 @@
 
   init();
 
-  /* =========================
-     OPTIONAL GLOBALS
-  ========================= */
   window.QuestionSplitterApp = {
     refreshUsageUI,
     resetEditorStateKeepUsage,
@@ -1297,7 +1233,7 @@
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data && event.data.type === "NEW_VERSION") {
-        console.log("🔄 New version detected, reloading...");
+        console.log("New version detected, reloading...");
         window.location.reload();
       }
     });
