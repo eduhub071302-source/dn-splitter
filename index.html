@@ -200,6 +200,65 @@
         </section>
 
         <section class="panel-section">
+          <h2 class="section-title">Output settings</h2>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Example output</div>
+              <div id="outputExampleText" class="stat-value output-example">q1.jpg</div>
+            </div>
+          </div>
+
+          <label class="input-label" for="outputPrefixInput">Name prefix</label>
+          <input
+            id="outputPrefixInput"
+            class="text-input"
+            type="text"
+            value="q"
+            placeholder="Example: q"
+          />
+
+          <label class="input-label" for="outputStartNumberInput">Start number</label>
+          <input
+            id="outputStartNumberInput"
+            class="text-input"
+            type="number"
+            min="0"
+            step="1"
+            value="1"
+          />
+
+          <label class="input-label" for="outputFormatSelect">File format</label>
+          <select id="outputFormatSelect" class="text-input">
+            <option value="jpg">JPG</option>
+            <option value="png">PNG</option>
+            <option value="webp">WEBP</option>
+          </select>
+
+          <div id="qualitySection" class="quality-section">
+            <label class="input-label" for="outputQualityRange">
+              Quality: <span id="outputQualityText">95%</span>
+            </label>
+            <input
+              id="outputQualityRange"
+              class="quality-range"
+              type="range"
+              min="50"
+              max="100"
+              step="1"
+              value="95"
+            />
+            <p class="small-note">
+              Quality is used for JPG and WEBP.
+            </p>
+          </div>
+
+          <p class="small-note">
+            Example: prefix <strong>q</strong> + start number <strong>12</strong> = q12, q13, q14...
+          </p>
+        </section>
+
+        <section class="panel-section">
           <h2 class="section-title">Export</h2>
 
           <div class="button-grid">
