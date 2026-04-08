@@ -28,7 +28,7 @@ window.APP_CONFIG = {
      "future-auto" → production (after PayHere)
      "local-dev"   → testing unlock codes
   ========================= */
-  PAYMENT_MODE: "future-auto",
+  PAYMENT_MODE: "local-dev",
 
   /* =========================
      DOMAIN + BACKEND (FILL LATER)
